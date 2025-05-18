@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>自動販売機プログラミング (カスタムブロック版 - 初期空)</title>
+    <style>
+        /* CSSは変更なし */
+        /* ← このコメントは元のままですが、実際には以下で変更します */
+        body {
+            font-family: sans-serif;
+            display: flex;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #blocklyArea {
+            height: 100%;
+            width: 60%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #blocklyDiv {
+            height: calc(100% - 40px);
+            width: 100%;
+        }
+
+        #blocklyControls {
+            height: 40px;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            border-top: 1px solid #ccc;
+        }
+
+        #simulationArea {
+            height: 100%;
+            width: 40%;
+            border-left: 1px solid #ccc;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 10px;
+            box-sizing: border-box;
+            background-color: #f0f0f0;
+        }
+
+        .vending-machine {
+            background-color: #d0d0d0;
+            border: 2px solid #555;
+            border-radius: 10px;
+            padding: 15px;
+            width: 400px;
+            max-width: 95%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-size: 0.7em;
+        }
+
+        /* === MODIFICATION START === */
+        /* h3とh4のフォントサイズを統一 */
+        .vending-machine h3,
+        .vending-machine h4 {
+            font-size: 1.1em;
+            /* 親要素の0.9emに対して1.1倍 (≒本文フォントの0.99em) */
+            margin-top: 10px;
+            margin-bottom: 6px;
+        }
+
+        /* 「商品」タイトル (JSでh3になる) と「お金」タイトル (h4) を中央揃え */
+        .vending-machine .products h3,
+        .vending-machine .money-controls>h4 {
+            text-align: center;
+        }
+
+        /* .outputs > h4 はフォントサイズのみ上記で統一。
+           text-alignはデフォルト(左揃え)。親の.outputsのalign-items:centerでブロック自体は中央寄せ。
+        */
+        /* === MODIFICATION END === */
+
+        .display-panel {
+            background-color: #333;
+            color: #0f0;
+            font-family: 'Courier New', Courier, monospace;
+            padding: 8px;
+            margin-bottom: 8px;
+            border-radius: 5px;
+            width: 90%;
+            min-height: 35px;
+            text-align: center;
+        }
+
+        #messageDisplay {
+            font-size: 13px;
+            margin-bottom: 3px;
+        }
+
+        #amountDisplay {
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .products,
+        .money-controls,
+        .outputs {
+            margin-bottom: 10px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .product-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 98%;
+            padding: 5px;
+            border: 1px solid #aaa;
+            margin-bottom: 4px;
+            background-color: #e8e8e8;
+            cursor: pointer;
+        }
+
+        .product-item.selected {
+            border: 2px solid #007bff;
+            background-color: #cce5ff;
+        }
+
+        .product-item:hover {
+            background-color: #ddd;
+        }
+
+        .product-item span {
+            display: inline-block;
+            pointer-events: none;
+        }
+
+        .product-name {
+            flex-grow: 1;
+        }
+
+        .product-price {
+            width: 55px;
+            text-align: right;
+        }
+
+        .product-stock {
+            width: 50px;
+            text-align: right;
+            font-size: 0.85em;
+        }
+
+        /* === MODIFICATION START === */
+        .money-buttons {
+            display: flex;
+            /* ボタンを横一列に配置 */
+            flex-wrap: wrap;
+            /* 幅が足りなければ折り返す */
+            justify-content: center;
+            /* ボタン群を中央に配置 */
+            width: 100%;
+            /* 親要素の幅いっぱいに広がる */
+            margin-bottom: 5px;
+            /* 返却レバーボタンとの間に少し余白 */
+        }
+
+        /* === MODIFICATION END === */
+
+        .money-buttons button,
+        #returnLeverButton {
+            padding: 6px 10px;
+            margin: 3px;
+            min-width: 60px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+
+        #dispenseSlot,
+        #changeDisplay {
+            border: 1px dashed #666;
+            padding: 8px;
+            margin-top: 3px;
+            width: 90%;
+            min-height: 25px;
+            background-color: #e8e8e8;
+            text-align: center;
+            font-size: 0.9em;
+        }
+
+        .coin-animation-container {
+            min-height: 30px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .coin-animation {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            background-color: gold;
+            border: 1px solid #b8860b;
+            border-radius: 50%;
+            margin: 2px;
+            animation: fall 0.5s ease-out forwards;
+            opacity: 0;
+            text-align: center;
+            line-height: 18px;
+            font-size: 10px;
+            color: #543005;
+            font-weight: bold;
+        }
+
+        @keyframes fall {
+            0% {
+                transform: translateY(-25px) rotate(720deg);
+                opacity: 0;
+            }
+
+            60% {
+                opacity: 1;
+            }
+
+            100% {
+                transform: translateY(0) rotate(0deg);
+                opacity: 1;
+            }
+        }
+
+        #activateProgramButton,
+        #resetVmButton {
+            padding: 8px 15px;
+            font-size: 14px;
+            cursor: pointer;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin-right: 10px;
+        }
+
+        #activateProgramButton {
+            background-color: #4CAF50;
+        }
+
+        #activateProgramButton.active {
+            background-color: #f44336;
+        }
+
+        #resetVmButton {
+            background-color: #007bff;
+        }
+    </style>
+    <script src="https://unpkg.com/blockly@10.2.2/blockly_compressed.js"></script>
+    <script src="https://unpkg.com/blockly@10.2.2/blocks_compressed.js"></script>
+    <script src="https://unpkg.com/blockly@10.2.2/javascript_compressed.js"></script>
+</head>
+
+<body>
+    <div id="blocklyArea">
+        <div id="blocklyDiv"></div>
+        <div id="blocklyControls">
+            <button id="activateProgramButton">プログラム有効化</button>
+            <button id="resetVmButton">自販機リセット (ワークスペース空)</button> 
+        </div>
+    </div>
+    <div id="simulationArea">
+        <div class="vending-machine">
+            <div class="display-panel">
+                <div id="messageDisplay">いらっしゃいませ</div>
+                <div id="amountDisplay">0円</div>
+            </div>
+            <div class="products">
+                <h4>商品</h4>
+            </div>
+            <div class="money-controls">
+                <h4>お金</h4>
+                <div class="money-buttons">
+                    <button onclick="uiInsertCoin(10)">10円</button>
+                    <button onclick="uiInsertCoin(50)">50円</button>
+                    <button onclick="uiInsertCoin(100)">100円</button>
+                    <button onclick="uiInsertCoin(500)">500円</button>
+                    <button onclick="uiInsertCoin(1000)">1000円</button>
+                </div>
+                <button id="returnLeverButton" onclick="uiActivateReturnLever()">返却レバー</button>
+            </div>
+            <div class="outputs">
+                <h4>取り出し口: </h4>
+                <div id="dispenseSlot">-</div>
+                <h4>お釣り: </h4>
+                <div id="changeDisplay">-</div>
+                <div id="changeAnimationSlot" class="coin-animation-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function applyOperatorHack() {
+            if (typeof Blockly !== 'undefined' && Blockly.Blocks && Blockly.Blocks['math_arithmetic']) {
+                const originalMathArithmeticInit = Blockly.Blocks['math_arithmetic'].init;
+                Blockly.Blocks['math_arithmetic'].init = function () {
+                    originalMathArithmeticInit.call(this);
+                    try {
+                        const opField = this.getField('OP');
+                        if (opField && opField instanceof Blockly.FieldDropdown) {
+                            opField.menuGenerator_ = [['+', 'ADD'], ['-', 'MINUS'], ['×', 'MULTIPLY'], ['÷', 'DIVIDE'], ['^', 'POWER']];
+                            const currentValue = this.getFieldValue('OP');
+                            if (currentValue) opField.setValue(currentValue);
+                        }
+                    } catch (e) { console.error("math_arithmetic customize error:", e); }
+                };
+            }
+        }
+
+        let workspace;
+        let interpreterInstance = null;
+        let isProgramActive = false;
+
+        const VENDING_MACHINE_PRODUCTS = { water: { name: "水", price: 80, stock: 5, color: "#3498DB" }, tea: { name: "お茶", price: 100, stock: 5, color: "#2ECC71" }, coffee: { name: "コーヒー", price: 130, stock: 4, color: "#A0522D" }, soda: { name: "炭酸飲料", price: 150, stock: 3, color: "#E74C3C" }, blacktea: { name: "紅茶", price: 110, stock: 4, color: "#F39C12" } };
+        const COIN_VALUES = [10, 50, 100, 500, 1000];
+        let initialStocks = {};
+        for (const key in VENDING_MACHINE_PRODUCTS) { initialStocks[key] = VENDING_MACHINE_PRODUCTS[key].stock; }
+
+        let currentInsertedAmount = 0;
+        let currentSelectedProductKey = null;
+        let lastInsertedCoinValue = 0;
+        let lastPressedProductKeyByUi = null;
+
+        function updateAmountDisplay() { document.getElementById('amountDisplay').textContent = `${currentInsertedAmount}円`; }
+        function displayMessage(msg) { document.getElementById('messageDisplay').textContent = String(msg); console.log(`VM MSG: ${msg}`); }
+        function updateDispenseSlot(productKey) { const p = VENDING_MACHINE_PRODUCTS[productKey]; document.getElementById('dispenseSlot').textContent = p ? p.name : '-'; }
+        function updateChangeDisplay(amount) { document.getElementById('changeDisplay').textContent = amount > 0 ? `${amount}円` : '-'; }
+        function calculateCoinBreakdown(totalChange) { const d = COIN_VALUES.slice().sort((a, b) => b - a); const b = {}; let r = totalChange; for (const n of d) { if (r >= n) { const c = Math.floor(r / n); if (c > 0) b[n] = c; r -= c * n; } } return b; }
+        function playChangeAnimationWithBreakdown(breakdown) { const s = document.getElementById('changeAnimationSlot'); s.innerHTML = ''; let dl = 0; const o = Object.keys(breakdown).map(Number).sort((a, b) => b - a); for (const n of o) { const c = breakdown[n]; for (let i = 0; i < c; i++) { const e = document.createElement('span'); e.classList.add('coin-animation'); e.textContent = n; e.style.animationDelay = `${dl}s`; s.appendChild(e); dl += 0.12; e.addEventListener('animationend', () => e.remove()); } } }
+        function renderProductsUI() { const d = document.querySelector('.products'); d.innerHTML = '<h3>商品</h3>'; for (const k in VENDING_MACHINE_PRODUCTS) { const p = VENDING_MACHINE_PRODUCTS[k]; const i = document.createElement('div'); i.classList.add('product-item'); i.id = `product-ui-${k}`; if (k === currentSelectedProductKey) i.classList.add('selected'); i.onclick = () => uiPressProductButton(k); i.innerHTML = `<span class="product-name">${p.name}</span><span class="product-price">${p.price}円</span><span class="product-stock">(残${p.stock})</span>`; d.appendChild(i); } }
+        function highlightSelectedProductUI() { document.querySelectorAll('.product-item').forEach(i => i.classList.remove('selected')); if (currentSelectedProductKey) { const e = document.getElementById(`product-ui-${currentSelectedProductKey}`); if (e) e.classList.add('selected'); } }
+
+        Blockly.Blocks['event_vending_machine_power_on'] = { init: function () { this.appendDummyInput().appendField("自販機の電源オン時"); this.setNextStatement(true, null); this.setColour("#5C81A6"); this.setDeletable(false); } };
+        Blockly.Blocks['event_product_button_pressed_general'] = { init: function () { this.appendDummyInput().appendField("商品ボタンが押されたとき"); this.setNextStatement(true, null); this.setColour("#5C81A6"); } };
+        Blockly.Blocks['event_coin_inserted_general'] = { init: function () { this.appendDummyInput().appendField("お金が投入されたとき"); this.setNextStatement(true, null); this.setColour("#5C81A6"); } };
+        Blockly.Blocks['event_return_lever_activated'] = { init: function () { this.appendDummyInput().appendField("返却レバーが操作されたとき"); this.setNextStatement(true, null); this.setColour("#5C81A6"); } };
+        Blockly.Blocks['action_select_product_ui'] = { init: function () { this.appendValueInput("PRODUCT_NAME").setCheck("ProductName").appendField("商品"); this.appendDummyInput().appendField("を選択状態にする"); this.setPreviousStatement(true, null); this.setNextStatement(true, null); this.setColour("#A65C81"); } };
+        Blockly.Blocks['action_display_message_on_panel'] = { init: function () { this.appendValueInput("MESSAGE").setCheck(["String", "Number", "Boolean"]).appendField("メッセージ"); this.appendDummyInput().appendField("を表示"); this.setPreviousStatement(true, null); this.setNextStatement(true, null); this.setColour("#A65C81"); } };
+        Blockly.Blocks['action_dispense_selected_product_and_handle_payment'] = { init: function () { this.appendDummyInput().appendField("選択商品を購入してお釣りを出す"); this.setPreviousStatement(true, null); this.setNextStatement(true, null); this.setColour("#A65C81"); } };
+        Blockly.Blocks['action_return_all_inserted_money'] = { init: function () { this.appendDummyInput().appendField("投入されたお金を全て返却する"); this.setPreviousStatement(true, null); this.setNextStatement(true, null); this.setColour("#A65C81"); } };
+        Blockly.Blocks['action_add_last_coin_to_total'] = { init: function () { this.appendDummyInput().appendField("投入されたお金を投入総額に加える"); this.setPreviousStatement(true, null); this.setNextStatement(true, null); this.setColour("#A65C81"); } };
+        function defineProductNameBlock(key, productInfo) { Blockly.Blocks[`value_product_name_${key}`] = { init: function () { this.appendDummyInput().appendField(productInfo.name); this.setOutput(true, "ProductName"); this.setColour(productInfo.color); } }; }
+        for (const key in VENDING_MACHINE_PRODUCTS) { defineProductNameBlock(key, VENDING_MACHINE_PRODUCTS[key]); }
+        COIN_VALUES.forEach(value => { Blockly.Blocks[`value_coin_${value}`] = { init: function () { this.appendDummyInput().appendField(`${value}円`); this.setOutput(true, "Number"); this.setColour(230); } }; });
+        Blockly.Blocks['value_current_inserted_amount'] = { init: function () { this.appendDummyInput().appendField("現在の投入総額"); this.setOutput(true, "Number"); this.setColour("#5BA5A5"); } };
+        Blockly.Blocks['value_last_inserted_coin_value'] = { init: function () { this.appendDummyInput().appendField("最後に投入されたお金の額"); this.setOutput(true, "Number"); this.setColour("#5BA5A5"); } };
+        Blockly.Blocks['value_selected_product_key'] = { init: function () { this.appendDummyInput().appendField("選択されている商品"); this.setOutput(true, "ProductName"); this.setColour("#5BA5A5"); } };
+        Blockly.Blocks['value_price_of_product'] = { init: function () { this.appendValueInput("PRODUCT_NAME").setCheck("ProductName").appendField("商品"); this.appendDummyInput().appendField("の値段"); this.setOutput(true, "Number"); this.setColour("#5BA5A5"); } };
+        Blockly.Blocks['value_stock_of_product'] = { init: function () { this.appendValueInput("PRODUCT_NAME").setCheck("ProductName").appendField("商品"); this.appendDummyInput().appendField("の在庫数"); this.setOutput(true, "Number"); this.setColour("#5BA5A5"); } };
+
+        Blockly.Blocks['custom_if_else'] = { init: function () { this.appendValueInput("IF0").setCheck("Boolean").appendField("もし"); this.appendStatementInput("DO0").appendField("なら"); this.appendStatementInput("ELSE").appendField("そうでなければ"); this.setPreviousStatement(true, null); this.setNextStatement(true, null); this.setColour(210); this.setTooltip("条件が真なら最初の処理を、偽なら2番目の処理を実行します。"); } };
+        Blockly.Blocks['custom_compare'] = { init: function () { this.appendValueInput("A").setCheck(["Number", "String"]); this.appendDummyInput().appendField(new Blockly.FieldDropdown([["=", "EQ"], ["≠", "NEQ"], ["<", "LT"], ["≦", "LTE"], [">", "GT"], ["≧", "GTE"]]), "OP"); this.appendValueInput("B").setCheck(["Number", "String"]); this.setInputsInline(true); this.setOutput(true, "Boolean"); this.setColour(210); this.setTooltip("2つの値を比較します。"); } };
+        Blockly.Blocks['custom_text'] = { init: function () { this.appendDummyInput().appendField("「").appendField(new Blockly.FieldTextInput(""), "TEXT_VALUE").appendField("」"); this.setOutput(true, "String"); this.setColour(160); this.setTooltip("指定された文字列を返します。"); } };
+        Blockly.Blocks['custom_boolean'] = { init: function () { this.appendDummyInput().appendField(new Blockly.FieldDropdown([["真", "TRUE"], ["偽", "FALSE"]]), "BOOL_VALUE"); this.setOutput(true, "Boolean"); this.setColour(210); this.setTooltip("真または偽の値を返します。"); } };
+        Blockly.Blocks['custom_text_join'] = { init: function () { this.appendValueInput("TEXT1").setCheck("String").appendField("文字列"); this.appendValueInput("TEXT2").setCheck("String").appendField("と文字列"); this.appendDummyInput().appendField("を結合"); this.setInputsInline(false); this.setOutput(true, "String"); this.setColour(160); this.setTooltip("2つの文字列を結合します。"); } };
+
+        function initBlockly() {
+            applyOperatorHack();
+            workspace = Blockly.inject('blocklyDiv', { toolbox: document.getElementById('mainToolbox'), grid: { spacing: 20, length: 3, colour: '#ccc', snap: true }, trashcan: true, zoom: { controls: true, wheel: true, startScale: 0.9 }, renderer: 'geras' });
+            workspace.addChangeListener(saveWorkspaceEventDriven);
+            loadWorkspaceEventDriven(); // 初期状態はここで決定される
+        }
+
+        const LOCAL_STORAGE_KEY = 'vendingMachine_customBlocks_v1_empty_init'; // キー名を定数化
+
+        function saveWorkspaceEventDriven(event) {
+            if (event && event.isUiEvent && event.type !== Blockly.Events.FINISHED_LOADING) return;
+            try { localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(Blockly.serialization.workspaces.save(workspace))); }
+            catch (e) { console.warn("Workspace save failed:", e); }
+        }
+
+        function loadWorkspaceEventDriven() {
+            try {
+                const jsonText = localStorage.getItem(LOCAL_STORAGE_KEY);
+                if (jsonText) {
+                    Blockly.serialization.workspaces.load(JSON.parse(jsonText), workspace);
+                    console.log("Workspace loaded from localStorage.");
+                } else {
+                    console.log("No workspace data in localStorage. Starting with an empty workspace.");
+                    if (workspace) {
+                        workspace.clear();
+                    }
+                }
+            } catch (e) {
+                console.warn("Workspace load failed, starting with an empty workspace:", e);
+                localStorage.removeItem(LOCAL_STORAGE_KEY);
+                if (workspace) {
+                    workspace.clear();
+                }
+            }
+        }
+
+        // ★★★ 修正箇所: 「自販機リセット」ボタンが押された時に呼ばれる関数 ★★★
+        function loadInitialEmptyWorkspace() { // 関数名を変更して分かりやすく
+            if (!workspace) return; // workspaceが未初期化の場合は何もしない
+            workspace.clear(); // 現在のワークスペースをクリア
+            console.log("Workspace cleared by reset button.");
+        }
+
+
+        class EventDrivenInterpreter {
+            constructor(workspace, simFunctions) { this.workspace = workspace; this.sim = simFunctions; this.isProcessingEvent = false; this.blockHandlers = {}; this.valueHandlers = {}; }
+            registerBlockHandler(type, func) { this.blockHandlers[type] = func; }
+            registerValueHandler(type, func) { this.valueHandlers[type] = func; }
+            async triggerEvent(eventType, eventData = {}) { if (!isProgramActive || this.isProcessingEvent) return; this.isProcessingEvent = true; if (eventData.coinValue) this.sim.setLastInsertedCoin(eventData.coinValue); if (eventData.productKey) this.sim.setLastPressedProductKey(eventData.productKey); const eventBlocks = this.workspace.getBlocksByType(eventType, false); for (const startBlock of eventBlocks) { await this.executeStatements(startBlock.getNextBlock(), eventData); if (!this.isProcessingEvent) break; } this.isProcessingEvent = false; }
+            async executeStatements(startingBlock, eventData) { let currentBlock = startingBlock; while (currentBlock && this.isProcessingEvent) { const handler = this.blockHandlers[currentBlock.type]; if (handler) await handler(currentBlock, this, eventData); else console.warn(`No handler for block: ${currentBlock.type}`); if (!this.isProcessingEvent) break; currentBlock = currentBlock.getNextBlock(); } }
+            getBlockValue(block, valueName, interp, eventData, defaultValue) { const input = block.getInput(valueName); if (!input || !input.connection) return defaultValue; const targetConnection = input.connection.targetConnection; if (targetConnection) { const targetBlock = targetConnection.getSourceBlock(); if (targetBlock) { if (this.valueHandlers[targetBlock.type]) return this.valueHandlers[targetBlock.type](targetBlock, this, eventData); if (targetBlock.type.startsWith('value_product_name_')) return targetBlock.type.substring('value_product_name_'.length); if (targetBlock.type.startsWith('value_coin_')) return parseInt(targetBlock.type.substring('value_coin_'.length), 10); if (targetBlock.type === 'math_number') return parseFloat(targetBlock.getFieldValue('NUM')); } } const shadowState = input.connection.getShadowState(); if (shadowState) { if (shadowState.type === 'math_number' && shadowState.fields) return parseFloat(shadowState.fields.NUM); if (shadowState.type && shadowState.type.startsWith('value_product_name_')) return shadowState.type.substring('value_product_name_'.length); if (shadowState.type && shadowState.type.startsWith('value_coin_')) return parseInt(shadowState.type.substring('value_coin_'.length), 10); } return defaultValue; }
+            stopCurrentEvent() { this.isProcessingEvent = false; }
+        }
+
+        const simFunctions = { resetVmState: () => { currentInsertedAmount = 0; currentSelectedProductKey = null; lastInsertedCoinValue = 0; lastPressedProductKeyByUi = null; for (const k in VENDING_MACHINE_PRODUCTS) { VENDING_MACHINE_PRODUCTS[k].stock = initialStocks[k]; } updateAmountDisplay(); displayMessage("いらっしゃいませ"); updateDispenseSlot('-'); updateChangeDisplay(0); document.getElementById('changeAnimationSlot').innerHTML = ''; renderProductsUI(); }, setLastInsertedCoin: (v) => { lastInsertedCoinValue = v; }, setLastPressedProductKey: (k) => { currentSelectedProductKey = k; highlightSelectedProductUI(); }, selectProductUi: (k) => { currentSelectedProductKey = k; highlightSelectedProductUI(); }, displayMessage: (m) => displayMessage(m), dispenseSelectedProductAndHandlePayment: () => { if (!currentSelectedProductKey) { simFunctions.displayMessage("商品が選ばれていません"); return; } const p = VENDING_MACHINE_PRODUCTS[currentSelectedProductKey]; if (!p) { simFunctions.displayMessage("商品情報がありません"); return; } if (p.stock <= 0) { simFunctions.displayMessage(`${p.name}は売切`); return; } if (currentInsertedAmount < p.price) { simFunctions.displayMessage(`お金不足(あと${p.price - currentInsertedAmount}円)`); return; } p.stock--; currentInsertedAmount -= p.price; updateDispenseSlot(currentSelectedProductKey); simFunctions.displayMessage(`${p.name}をどうぞ！`); renderProductsUI(); const cT = currentInsertedAmount; updateChangeDisplay(cT); if (cT > 0) { const bD = calculateCoinBreakdown(cT); playChangeAnimationWithBreakdown(bD); } currentInsertedAmount = 0; updateAmountDisplay(); currentSelectedProductKey = null; highlightSelectedProductUI(); }, returnAllInsertedMoney: () => { const cT = currentInsertedAmount; updateChangeDisplay(cT); if (cT > 0) { simFunctions.displayMessage(`${cT}円返却`); const bD = calculateCoinBreakdown(cT); playChangeAnimationWithBreakdown(bD); } else { simFunctions.displayMessage("投入金なし"); } currentInsertedAmount = 0; updateAmountDisplay(); currentSelectedProductKey = null; highlightSelectedProductUI(); }, addLastCoinToTotal: () => { currentInsertedAmount += lastInsertedCoinValue; updateAmountDisplay(); simFunctions.displayMessage(`${lastInsertedCoinValue}円投入(計${currentInsertedAmount}円)`); }, getCurrentInsertedAmount: () => currentInsertedAmount, getLastInsertedCoinValue: () => lastInsertedCoinValue, getSelectedProductKey: () => (currentSelectedProductKey || lastPressedProductKeyByUi), getPriceOfProduct: (k) => VENDING_MACHINE_PRODUCTS[k] ? VENDING_MACHINE_PRODUCTS[k].price : 0, getStockOfProduct: (k) => VENDING_MACHINE_PRODUCTS[k] ? VENDING_MACHINE_PRODUCTS[k].stock : 0, };
+        function uiPressProductButton(productKey) { if (!isProgramActive || !interpreterInstance) return; interpreterInstance.triggerEvent('event_product_button_pressed_general', { productKey: productKey }); }
+        function uiInsertCoin(amount) { if (!isProgramActive || !interpreterInstance) return; updateDispenseSlot('-'); updateChangeDisplay(0); document.getElementById('changeAnimationSlot').innerHTML = ''; interpreterInstance.triggerEvent('event_coin_inserted_general', { coinValue: amount }); }
+        function uiActivateReturnLever() { if (!isProgramActive || !interpreterInstance) return; interpreterInstance.triggerEvent('event_return_lever_activated'); }
+
+        const activateBtn = document.getElementById('activateProgramButton');
+        activateBtn.addEventListener('click', () => {
+            if (isProgramActive) {
+                isProgramActive = false; if (interpreterInstance) interpreterInstance.stopCurrentEvent();
+                activateBtn.textContent = 'プログラム有効化'; activateBtn.classList.remove('active');
+                displayMessage("プログラム停止中");
+            } else {
+                isProgramActive = true;
+                if (!interpreterInstance) interpreterInstance = new EventDrivenInterpreter(workspace, simFunctions);
+                interpreterInstance.registerBlockHandler('action_select_product_ui', async (b, i, e) => i.sim.selectProductUi(i.getBlockValue(b, 'PRODUCT_NAME', i, e, null)));
+                interpreterInstance.registerBlockHandler('action_display_message_on_panel', async (b, i, e) => i.sim.displayMessage(i.getBlockValue(b, 'MESSAGE', i, e, "メッセージ")));
+                interpreterInstance.registerBlockHandler('action_dispense_selected_product_and_handle_payment', async (b, i, e) => i.sim.dispenseSelectedProductAndHandlePayment());
+                interpreterInstance.registerBlockHandler('action_return_all_inserted_money', async (b, i, e) => i.sim.returnAllInsertedMoney());
+                interpreterInstance.registerBlockHandler('action_add_last_coin_to_total', async (b, i, e) => i.sim.addLastCoinToTotal());
+                interpreterInstance.registerBlockHandler('custom_if_else', async (block, interp, eventData) => { const condition = interp.getBlockValue(block, 'IF0', interp, eventData, false); if (condition) { await interp.executeStatements(block.getInputTargetBlock('DO0'), eventData); } else { const elseStatements = block.getInputTargetBlock('ELSE'); if (elseStatements) { await interp.executeStatements(elseStatements, eventData); } } });
+                interpreterInstance.registerValueHandler('value_current_inserted_amount', (b, i, e) => i.sim.getCurrentInsertedAmount());
+                interpreterInstance.registerValueHandler('value_last_inserted_coin_value', (b, i, e) => i.sim.getLastInsertedCoinValue());
+                interpreterInstance.registerValueHandler('value_selected_product_key', (b, i, e) => i.sim.getSelectedProductKey());
+                interpreterInstance.registerValueHandler('value_price_of_product', (b, i, e) => i.sim.getPriceOfProduct(i.getBlockValue(b, 'PRODUCT_NAME', i, e, null)));
+                interpreterInstance.registerValueHandler('value_stock_of_product', (b, i, e) => i.sim.getStockOfProduct(i.getBlockValue(b, 'PRODUCT_NAME', i, e, null)));
+                COIN_VALUES.forEach(value => { interpreterInstance.registerValueHandler(`value_coin_${value}`, () => value); });
+                interpreterInstance.registerValueHandler('math_arithmetic', (b, i, e) => { const op = b.getFieldValue('OP'); const vA = Number(i.getBlockValue(b, 'A', i, e, 0)); const vB = Number(i.getBlockValue(b, 'B', i, e, 0)); switch (op) { case 'ADD': return vA + vB; case 'MINUS': return vA - vB; case 'MULTIPLY': return vA * vB; case 'DIVIDE': return vB !== 0 ? vA / vB : Infinity; case 'POWER': return Math.pow(vA, vB); default: return 0; } });
+                interpreterInstance.registerValueHandler('custom_compare', (block, interp, eventData) => { const op = block.getFieldValue('OP'); const valA = interp.getBlockValue(block, 'A', interp, eventData, 0); const valB = interp.getBlockValue(block, 'B', interp, eventData, 0); const numA = Number(valA); const numB = Number(valB); switch (op) { case 'EQ': return valA == valB; case 'NEQ': return valA != valB; case 'LT': return numA < numB; case 'LTE': return numA <= numB; case 'GT': return numA > numB; case 'GTE': return numA >= numB; default: return false; } });
+                interpreterInstance.registerValueHandler('custom_text', (block) => String(block.getFieldValue('TEXT_VALUE')));
+                interpreterInstance.registerValueHandler('custom_boolean', (block) => block.getFieldValue('BOOL_VALUE') === 'TRUE');
+                interpreterInstance.registerValueHandler('custom_text_join', (block, interp, eventData) => { const text1 = String(interp.getBlockValue(block, 'TEXT1', interp, eventData, '')); const text2 = String(interp.getBlockValue(block, 'TEXT2', interp, eventData, '')); return text1 + text2; });
+                activateBtn.textContent = 'プログラム無効化'; activateBtn.classList.add('active');
+                simFunctions.resetVmState();
+                interpreterInstance.triggerEvent('event_vending_machine_power_on');
+            }
+        });
+
+        document.getElementById('resetVmButton').addEventListener('click', () => {
+            if (isProgramActive) activateBtn.click(); // プログラムが有効なら無効化
+            simFunctions.resetVmState(); // 自販機状態リセット
+            loadInitialEmptyWorkspace(); // ★★★ 修正: 空のワークスペースをロードする関数を呼び出し ★★★
+        });
+
+        window.onload = function () {
+            const toolboxXml = `
+        <xml id="mainToolbox" style="display: none">
+          <category name="イベント" colour="#5C81A6"> <block type="event_vending_machine_power_on"></block> <block type="event_product_button_pressed_general"></block> <block type="event_coin_inserted_general"></block> <block type="event_return_lever_activated"></block> </category>
+          <category name="アクション" colour="#A65C81"> <block type="action_select_product_ui"><value name="PRODUCT_NAME"><shadow type="value_product_name_water"></shadow></value></block> <block type="action_display_message_on_panel"><value name="MESSAGE"><shadow type="custom_text"><field name="TEXT_VALUE">メッセージ</field></shadow></value></block> <block type="action_add_last_coin_to_total"></block> <block type="action_dispense_selected_product_and_handle_payment"></block> <block type="action_return_all_inserted_money"></block> </category>
+          <category name="値（自販機情報）" colour="#5BA5A5"> <block type="value_current_inserted_amount"></block> <block type="value_last_inserted_coin_value"></block> <block type="value_selected_product_key"></block> <block type="value_price_of_product"><value name="PRODUCT_NAME"><shadow type="value_product_name_water"></shadow></value></block> <block type="value_stock_of_product"><value name="PRODUCT_NAME"><shadow type="value_product_name_water"></shadow></value></block> </category>
+          <category name="値（商品名）" colour="${VENDING_MACHINE_PRODUCTS.water.color}"> ${Object.keys(VENDING_MACHINE_PRODUCTS).map(key => `<block type="value_product_name_${key}"></block>`).join('')} </category>
+          <category name="値（お金）" colour="230"> ${COIN_VALUES.map(value => `<block type="value_coin_${value}"></block>`).join('')} </category>
+          <category name="カスタム論理" colour="210"> <block type="custom_if_else"></block> <block type="custom_compare"><value name="A"><shadow type="math_number"><field name="NUM">1</field></shadow></value><value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block> <block type="custom_boolean"></block> </category>
+          <category name="カスタムテキスト" colour="160"> <block type="custom_text"><field name="TEXT_VALUE"></field></block> <block type="custom_text_join"><value name="TEXT1"><shadow type="custom_text"><field name="TEXT_VALUE">こんにちは</field></shadow></value><value name="TEXT2"><shadow type="custom_text"><field name="TEXT_VALUE">世界</field></shadow></value></block> </category>
+          <category name="数学（計算）" colour="230"> <block type="math_number"><field name="NUM">0</field></block> <block type="math_arithmetic"><value name="A"><shadow type="math_number"><field name="NUM">1</field></shadow></value><value name="B"><shadow type="math_number"><field name="NUM">1</field></shadow></value></block> </category>
+        </xml>`;
+            document.body.insertAdjacentHTML('beforeend', toolboxXml);
+            initBlockly();
+            simFunctions.resetVmState();
+            console.log("Vending Machine Simulator (Custom Blocks, Initial Empty) Ready.");
+        };
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML/画像スライドショー (統合版 - パスワード保護付き)</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+            padding-bottom: 80px;
+            background-color: #f4f4f4;
+        }
+
+        .slideshow-container {
+            width: 88vw;
+            height: 86vh;
+            border: 1px solid #ccc;
+            overflow: hidden;
+            margin-bottom: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: white; /* コンテンツがない場合や切り替え時の背景 */
+        }
+
+        #slide-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: none;
+        }
+
+        #slide-image {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            display: none;
+        }
+
+        .navigation-buttons {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .navigation-buttons button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            border: 1px solid #007bff;
+            background-color: #007bff;
+            color: white;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+
+        .navigation-buttons button:hover {
+            background-color: #0056b3;
+        }
+
+        .navigation-buttons button:disabled {
+            background-color: #ccc;
+            border-color: #ccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="slideshow-container">
+        <iframe id="slide-iframe" src="" frameborder="0"></iframe>
+        <img id="slide-image" src="" alt="スライド画像">
+    </div>
+
+    <div class="navigation-buttons">
+        <button id="prev-button">前へ</button>
+        <button id="next-button">次へ</button>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const iframeElement = document.getElementById('slide-iframe');
+            const imageElement = document.getElementById('slide-image');
+            const prevButton = document.getElementById('prev-button');
+            const nextButton = document.getElementById('next-button');
+
+            // ★★★ パスワード設定 ★★★
+            const CORRECT_PASSWORD = "1234"; // ここに任意のパスワードを設定
+
+            const pages = [
+                { type: 'image', path: 'pages/image1.png' },
+                { type: 'image', path: 'pages/image2.png' },
+                { type: 'html', path: 'pages/page1.html' },
+                { type: 'html', path: 'pages/page2.html' },
+                // ★★★ 新しいファイルとパスワード保護フラグを追加 ★★★
+                { type: 'html', path: 'pages/page3.html', requiresPassword: true }
+            ];
+
+            let currentPageIndex = 0;
+            let previousPageIndexBeforePasswordAttempt = 0; // パスワード試行前のインデックスを保持
+
+            function loadPage(index, isRetry = false) { // isRetryフラグを追加
+                if (index < 0 || index >= pages.length) {
+                    console.error("無効なページインデックス:", index);
+                    return;
+                }
+
+                const content = pages[index];
+
+                // ★★★ パスワードチェック ★★★
+                if (content.requiresPassword && !isRetry) { // 初回アクセス時のみパスワード要求
+                    const enteredPassword = prompt("このページを表示するにはパスワードが必要です:");
+                    if (enteredPassword === CORRECT_PASSWORD) {
+                        // パスワードが正しい場合、ページを読み込む
+                        displayContent(content, index);
+                        previousPageIndexBeforePasswordAttempt = index; // 成功したら更新
+                    } else {
+                        alert("パスワードが違います。");
+                        // パスワードが違う場合、前のページに戻す（または現在のページに留まる）
+                        // ここでは、パスワード試行前のインデックスに戻す
+                        currentPageIndex = previousPageIndexBeforePasswordAttempt;
+                        // 再帰呼び出しを避けるため、ここでは直接 displayContent は呼ばない
+                        // (ユーザーが再度同じボタンを押すまで何もしない)
+                        return; // ページ遷移を中止
+                    }
+                } else {
+                    // パスワード不要、またはパスワード試行の再試行でない（既に認証済み）場合
+                    displayContent(content, index);
+                    if (!content.requiresPassword) { // パスワード不要ページなら、そのインデックスを記憶
+                       previousPageIndexBeforePasswordAttempt = index;
+                    }
+                }
+            }
+
+            function displayContent(content, index) {
+                currentPageIndex = index;
+
+                iframeElement.style.display = 'none';
+                imageElement.style.display = 'none';
+                iframeElement.src = 'about:blank';
+                imageElement.src = '';
+
+                if (content.type === 'html') {
+                    iframeElement.src = content.path;
+                    iframeElement.style.display = 'block';
+                } else if (content.type === 'image') {
+                    imageElement.src = content.path;
+                    imageElement.style.display = 'block';
+                }
+                updateButtonStates();
+            }
+
+            function updateButtonStates() {
+                // このサンプルではボタンの無効化は行いませんが、
+                // 必要であれば最初や最後のページでボタンを無効化するロジックを追加できます。
+                // prevButton.disabled = currentPageIndex === 0;
+                // nextButton.disabled = currentPageIndex === pages.length - 1;
+            }
+
+
+            nextButton.addEventListener('click', () => {
+                const nextIndex = (currentPageIndex + 1) % pages.length;
+                // パスワード試行前に現在のインデックスを保存
+                if (!pages[nextIndex].requiresPassword || pages[currentPageIndex].requiresPassword) {
+                     // 次のページがパスワード不要、または現在のページが既にパスワード保護されている場合(再試行の可能性がある)
+                    previousPageIndexBeforePasswordAttempt = currentPageIndex;
+                }
+                loadPage(nextIndex);
+            });
+
+            prevButton.addEventListener('click', () => {
+                const prevIndex = (currentPageIndex - 1 + pages.length) % pages.length;
+                 // パスワード試行前に現在のインデックスを保存
+                if (!pages[prevIndex].requiresPassword || pages[currentPageIndex].requiresPassword) {
+                    previousPageIndexBeforePasswordAttempt = currentPageIndex;
+                }
+                loadPage(prevIndex);
+            });
+
+            if (pages.length > 0) {
+                previousPageIndexBeforePasswordAttempt = 0; // 初期化
+                loadPage(0);
+            } else {
+                console.error("表示するコンテンツが指定されていません。");
+                const container = document.querySelector('.slideshow-container');
+                if (container) {
+                    container.innerHTML = "<p>表示するコンテンツが設定されていません。</p>";
+                }
+                prevButton.style.display = 'none';
+                nextButton.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>信号機プログラミング (Blockly Interpreter)</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      height: 100vh;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    #blocklyArea {
+      height: 100%;
+      width: 70%;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      /* ボタンを配置しやすくするため */
+    }
+
+    #blocklyDiv {
+      height: 100%;
+      width: 100%;
+    }
+
+    #resetWorkspaceButton {
+      /* ★追加 */
+      position: absolute;
+      top: 10px;
+      right: 20px;
+      padding: 8px 15px;
+      font-size: 14px;
+      cursor: pointer;
+      background-color: #f44336;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      z-index: 10;
+      /* 他の要素より手前に表示 */
+    }
+
+    #resetWorkspaceButton:hover {
+      /* ★追加 */
+      background-color: #d32f2f;
+    }
+
+    #simulationArea {
+      height: 100%;
+      width: 30%;
+      border-left: 1px solid #ccc;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 10px;
+      box-sizing: border-box;
+      background-color: #e0e0e0;
+    }
+
+    #trafficLightCanvas {
+      border: 1px solid black;
+      background-color: #d0d0d0;
+      margin-top: 20px;
+      margin-bottom: 20px;
+    }
+
+    #runButton {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      min-width: 80px;
+    }
+
+    #runButton:hover {
+      background-color: #45a049;
+    }
+
+    .blocklyTreeLabel {
+      font-size: 1.1em !important;
+    }
+  </style>
+  <script src="https://unpkg.com/blockly/blockly_compressed.js"></script>
+  <script src="https://unpkg.com/blockly/blocks_compressed.js"></script>
+  <script src="https://unpkg.com/blockly/msg/js/ja.js"></script>
+</head>
+
+<body>
+
+  <div id="blocklyArea">
+    <xml xmlns="https://developers.google.com/blockly/xml" id="toolbox" style="display: none">
+      <category name="イベント" colour="#5C81A6">
+        <block type="event_start"></block>
+      </category>
+      <category name="制御" colour="#5CA65C">
+        <block type="control_infinite_loop"></block>
+        <block type="control_repeat_n_times">
+          <value name="TIMES">
+            <shadow type="math_number">
+              <field name="NUM">5</field>
+            </shadow>
+          </value>
+        </block>
+        <block type="control_wait_seconds">
+          <value name="SECONDS">
+            <shadow type="value_seconds">
+              <field name="NUM">1</field>
+            </shadow>
+          </value>
+        </block>
+      </category>
+      <category name="信号の動作" colour="#A65C81">
+        <block type="action_light_up_seconds">
+          <value name="COLOR">
+            <shadow type="value_color_red"></shadow>
+          </value>
+          <value name="SECONDS">
+            <shadow type="value_seconds">
+              <field name="NUM">3</field>
+            </shadow>
+          </value>
+        </block>
+        <block type="action_turn_on_light">
+          <value name="COLOR">
+            <shadow type="value_color_red"></shadow>
+          </value>
+        </block>
+        <block type="action_turn_off_light">
+          <value name="COLOR">
+            <shadow type="value_color_red"></shadow>
+          </value>
+        </block>
+        <block type="action_turn_off_all_lights"></block>
+      </category>
+      <category name="色" colour="#A6745B">
+        <block type="value_color_red"></block>
+        <block type="value_color_yellow"></block>
+        <block type="value_color_blue"></block>
+        <block type="value_color_green"></block>
+      </category>
+      <category name="値" colour="#5BA5A5">
+        <block type="value_seconds">
+          <field name="NUM">1</field>
+        </block>
+        <block type="math_number">
+          <field name="NUM">0</field>
+        </block>
+      </category>
+    </xml>
+    <div id="blocklyDiv"></div>
+    <button id="resetWorkspaceButton" title="ワークスペースをリセット">リセット</button> <!-- ★変更: ボタン追加 -->
+  </div>
+
+  <div id="simulationArea">
+    <h2>実行結果</h2>
+    <canvas id="trafficLightCanvas" width="120" height="300"></canvas>
+    <button id="runButton">実行</button>
+  </div>
+
+  <script>
+    // --- グローバル変数 ---
+    let workspace;
+    let trafficLightCtx;
+    const lightRadius = 20;
+    const lightColors = {
+      red: { off: '#600000', on: '#FF0000' },
+      yellow: { off: '#8B7500', on: '#FFFF00' },
+      green: { off: '#004000', on: '#00FF00' },
+      blue: { off: '#000050', on: '#0000FF' }
+    };
+    let currentLightState = { red: false, yellow: false, green: false, blue: false };
+    // isRunning は Interpreter インスタンス内で管理
+
+    // --- Blocklyカスタムブロック定義 ---
+    Blockly.Blocks['event_start'] = { init: function () { this.appendDummyInput().appendField("開始したとき"); this.setNextStatement(true, null); this.setColour("#5C81A6"); this.setTooltip("プログラムが開始されたときに実行されます。"); this.setDeletable(false); } };
+    Blockly.Blocks['control_infinite_loop'] = { init: function () { this.appendStatementInput("DO").appendField("ずっと繰り返す"); this.setPreviousStatement(true, null); this.setNextStatement(true, null); this.setColour("#5CA65C"); this.setTooltip("中のブロックを無限に繰り返します。"); } };
+    Blockly.Blocks['control_repeat_n_times'] = { init: function () { this.appendValueInput("TIMES").setCheck("Number").appendField("回繰り返す"); this.appendStatementInput("DO").appendField("実行"); this.setPreviousStatement(true, null); this.setNextStatement(true, null); this.setInputsInline(true); this.setColour("#5CA65C"); this.setTooltip("中のブロックを指定された回数繰り返します。"); } };
+    Blockly.Blocks['control_wait_seconds'] = { init: function () { this.appendValueInput("SECONDS").setCheck("Number").appendField("秒待つ"); this.setPreviousStatement(true, null); this.setNextStatement(true, null); this.setInputsInline(true); this.setColour("#5CA65C"); this.setTooltip("指定された秒数だけプログラムの実行を停止します。"); } };
+
+    function defineColorBlock(typeName, colorName, blockColorValue) {
+      Blockly.Blocks[typeName] = {
+        init: function () {
+          this.appendDummyInput().appendField(colorName);
+          this.setOutput(true, "ColorName");
+          this.setColour(blockColorValue);
+          this.setTooltip(colorName + "の色を表します。");
+        }
+      };
+    }
+    defineColorBlock('value_color_red', '赤', "#CF63CF");
+    defineColorBlock('value_color_yellow', '黄', "#FFBF00");
+    defineColorBlock('value_color_blue', '青', "#6495ED");
+    defineColorBlock('value_color_green', '緑', "#90EE90");
+
+    Blockly.Blocks['value_seconds'] = { init: function () { this.appendDummyInput().appendField(new Blockly.FieldNumber(1, 0, Infinity, 0.1), "NUM").appendField("秒"); this.setOutput(true, "Number"); this.setColour("#5BA5A5"); this.setTooltip("秒数を指定します。"); } };
+
+    Blockly.Blocks['action_light_up_seconds'] = { init: function () { this.appendValueInput("COLOR").setCheck("ColorName"); this.appendValueInput("SECONDS").setCheck("Number").appendField("が"); this.appendDummyInput().appendField("秒光る"); this.setPreviousStatement(true, null); this.setNextStatement(true, null); this.setInputsInline(true); this.setColour("#A65C81"); this.setTooltip("指定した色の信号を指定秒数点灯させ、その後消灯します。"); } };
+    Blockly.Blocks['action_turn_on_light'] = { init: function () { this.appendValueInput("COLOR").setCheck("ColorName").appendField("の信号をつける"); this.setPreviousStatement(true, null); this.setNextStatement(true, null); this.setInputsInline(true); this.setColour("#A65C81"); this.setTooltip("指定した色の信号を点灯させます（点灯し続けます）。"); } };
+    Blockly.Blocks['action_turn_off_light'] = { init: function () { this.appendValueInput("COLOR").setCheck("ColorName").appendField("の信号を消す"); this.setPreviousStatement(true, null); this.setNextStatement(true, null); this.setInputsInline(true); this.setColour("#A65C81"); this.setTooltip("指定した色の信号を消灯します。"); } };
+    Blockly.Blocks['action_turn_off_all_lights'] = { init: function () { this.appendDummyInput().appendField("すべての信号を消す"); this.setPreviousStatement(true, null); this.setNextStatement(true, null); this.setColour("#A65C81"); this.setTooltip("すべての信号灯を消灯します。"); } };
+
+    // --- Blocklyワークスペース初期化 ---
+    function initBlockly() {
+      var blocklyDiv = document.getElementById('blocklyDiv');
+      workspace = Blockly.inject(blocklyDiv, {
+        toolbox: document.getElementById('toolbox'),
+        grid: { spacing: 20, length: 3, colour: '#ccc', snap: true },
+        trashcan: false, // ★変更: ゴミ箱を無効化
+        zoom: { controls: true, wheel: true, startScale: 0.9, maxScale: 3, minScale: 0.3, scaleSpeed: 1.2 },
+        renderer: 'geras'
+      });
+      // workspace.addChangeListener(saveWorkspace); // localStorageへの保存は停止済み
+      loadWorkspace();
+
+      // ★追加: リセットボタンのイベントリスナー
+      document.getElementById('resetWorkspaceButton').addEventListener('click', function () {
+        if (confirm("ワークスペースの内容を全てリセットしますか？")) {
+          Blockly.Events.disable();
+          try {
+            workspace.clear();
+            console.log("ワークスペースがリセットされました。");
+          } finally {
+            Blockly.Events.enable();
+          }
+          workspace.render();
+
+          if (interpreterInstance && interpreterInstance.isRunning) {
+            interpreterInstance.stop();
+            const runButton = document.getElementById('runButton');
+            runButton.textContent = '実行';
+            runButton.style.backgroundColor = '#4CAF50';
+            simFunctions.turnOffAllLights();
+          }
+        }
+      });
+    }
+
+    function saveWorkspace(event) {
+      // この関数は現在呼び出されていません
+      if (event && event.isUiEvent && event.type !== Blockly.Events.FINISHED_LOADING) { return; }
+      try {
+        const json = Blockly.serialization.workspaces.save(workspace);
+        localStorage.setItem('trafficLightBlocklyWorkspaceJson', JSON.stringify(json));
+        console.log("ワークスペースをlocalStorageに保存しました。");
+      } catch (e) {
+        console.warn("Workspace save failed (JSON): ", e);
+      }
+    }
+
+    function loadWorkspace() {
+      console.log("常に空のワークスペースで開始します（localStorageは使用しません）。");
+      if (workspace) {
+        Blockly.Events.disable();
+        try {
+          workspace.clear();
+        } finally {
+          Blockly.Events.enable();
+        }
+        workspace.render();
+      }
+    }
+
+    function loadInitialBlocks() {
+      // この関数は現在 loadWorkspace からは呼び出されていません
+      // リセット後に特定の初期状態にしたい場合は、リセットボタンのハンドラから呼び出すことも検討できます
+      console.log("初期ブロックを読み込みます (JSON形式)。※現在は呼び出されません");
+      const initialJson = { /* ... (以前のinitialJsonの内容) ... */ };
+      try {
+        Blockly.serialization.workspaces.load(initialJson, workspace);
+        workspace.render();
+      } catch (e) {
+        console.error("初期ブロックの読み込みに失敗しました (JSON):", e);
+      }
+    }
+
+    // --- 信号機描画 ---
+    function initTrafficLightCanvas() { var canvas = document.getElementById('trafficLightCanvas'); trafficLightCtx = canvas.getContext('2d'); drawTrafficLight(); }
+    function drawTrafficLight(stateToDraw = currentLightState) { if (!trafficLightCtx) return; const canvasWidth = trafficLightCtx.canvas.width; const canvasHeight = trafficLightCtx.canvas.height; trafficLightCtx.clearRect(0, 0, canvasWidth, canvasHeight); const boxWidth = 60; const boxHeight = (lightRadius * 2 * 3) + (10 * 4); const boxX = (canvasWidth - boxWidth) / 2; const boxY = (canvasHeight - boxHeight) / 2; trafficLightCtx.fillStyle = '#333333'; trafficLightCtx.fillRect(boxX, boxY, boxWidth, boxHeight); trafficLightCtx.strokeStyle = 'black'; trafficLightCtx.lineWidth = 2; trafficLightCtx.strokeRect(boxX, boxY, boxWidth, boxHeight); const marginY = boxY + 10 + lightRadius; const spacingY = lightRadius * 2 + 10; const lightYPositionsDynamic = { red: marginY, yellow: marginY + spacingY, green: marginY + spacingY * 2, blue: marginY + spacingY * 2 }; drawLightC('red', lightYPositionsDynamic.red, stateToDraw); drawLightC('yellow', lightYPositionsDynamic.yellow, stateToDraw); if (stateToDraw.blue) { drawLightC('blue', lightYPositionsDynamic.blue, stateToDraw); } else { drawLightC('green', lightYPositionsDynamic.green, stateToDraw); } }
+    function drawLightC(colorKey, yPos, stateToDraw) { if (!trafficLightCtx) return; const canvasWidth = trafficLightCtx.canvas.width; trafficLightCtx.beginPath(); trafficLightCtx.arc(canvasWidth / 2, yPos, lightRadius, 0, 2 * Math.PI); trafficLightCtx.fillStyle = stateToDraw[colorKey] ? lightColors[colorKey].on : lightColors[colorKey].off; trafficLightCtx.fill(); trafficLightCtx.strokeStyle = '#111'; trafficLightCtx.lineWidth = 1; trafficLightCtx.stroke(); }
+
+    // --- 信号機制御関数 ---
+    async function sleep(seconds) { console.log('sleep called for', seconds, 's'); return new Promise(resolve => setTimeout(resolve, seconds * 1000)); }
+    function setLightStateWrapper(color, isOn) { console.log('setLightStateWrapper called with:', color, isOn); if (color === 'blue' && isOn) { currentLightState.green = false; currentLightState.blue = true; } else if (color === 'green' && isOn) { currentLightState.blue = false; currentLightState.green = true; } else if (currentLightState.hasOwnProperty(color)) { currentLightState[color] = isOn; } if (color === 'blue' && !isOn) currentLightState.blue = false; if (color === 'green' && !isOn) currentLightState.green = false; drawTrafficLight(); }
+    async function lightUpForSeconds(color, seconds) { console.log('lightUpForSeconds called for', color, seconds, 's'); setLightStateWrapper(color, true); await sleep(seconds); if (currentLightState.hasOwnProperty(color) && currentLightState[color]) { console.log('lightUpForSeconds: turning off', color); setLightStateWrapper(color, false); } else { console.log('lightUpForSeconds: color', color, 'was already off or changed.'); } }
+    function turnOffAllLights() { console.log('turnOffAllLights called'); currentLightState.red = false; currentLightState.yellow = false; currentLightState.green = false; currentLightState.blue = false; drawTrafficLight(); }
+
+    // --- Block Interpreter ---
+    class BlockInterpreter {
+      constructor(workspace, simulationFunctions) {
+        this.workspace = workspace;
+        this.sim = simulationFunctions;
+        this.isRunning = false;
+        this.blockHandlers = {};
+      }
+
+      registerBlockHandler(blockType, handlerAsyncFn) {
+        this.blockHandlers[blockType] = handlerAsyncFn;
+      }
+
+      async executeStatements(startingBlock) {
+        let currentBlock = startingBlock;
+        while (currentBlock && this.isRunning) {
+          const handler = this.blockHandlers[currentBlock.type];
+          if (handler) {
+            console.log(`[Interpreter] Executing: ${currentBlock.type} (ID: ${currentBlock.id})`);
+            await handler(currentBlock, this);
+          } else {
+            console.warn(`[Interpreter] No handler for block type: ${currentBlock.type}`);
+          }
+          if (!this.isRunning) break;
+          currentBlock = currentBlock.getNextBlock();
+        }
+      }
+
+      getBlockValue(block, valueName, defaultValue) {
+        const input = block.getInput(valueName);
+        if (!input || !input.connection) return defaultValue;
+        const targetConnection = input.connection.targetConnection;
+        if (targetConnection) {
+          const targetBlock = targetConnection.getSourceBlock();
+          if (targetBlock) {
+            if (targetBlock.type === 'value_seconds' || targetBlock.type === 'math_number') {
+              return parseFloat(targetBlock.getFieldValue('NUM'));
+            }
+            if (targetBlock.type.startsWith('value_color_')) {
+              return targetBlock.type.substring('value_color_'.length);
+            }
+            console.warn(`[Interpreter] Unsupported value block type: ${targetBlock.type}`);
+            return defaultValue;
+          }
+        }
+        const shadowState = input.connection.getShadowState();
+        if (shadowState) {
+          if (shadowState.type === 'value_seconds' || shadowState.type === 'math_number') {
+            if (shadowState.fields && shadowState.fields.NUM !== undefined) {
+              return parseFloat(shadowState.fields.NUM);
+            }
+          } else if (shadowState.type && shadowState.type.startsWith('value_color_')) {
+            return shadowState.type.substring('value_color_'.length);
+          }
+        }
+        console.warn(`[Interpreter] Could not get value for '${valueName}' on block ${block.type}. Using default: ${defaultValue}`);
+        return defaultValue;
+      }
+
+      async run() {
+        if (this.isRunning) { console.warn("[Interpreter] Already running."); return; }
+        this.isRunning = true;
+        this.sim.turnOffAllLights();
+        console.log("[Interpreter] Run started.");
+        const startBlocks = this.workspace.getBlocksByType('event_start', false);
+        if (startBlocks.length === 0) {
+          alert("「開始したとき」ブロックが見つかりません。");
+          this.isRunning = false;
+          return;
+        }
+        const firstBlockAfterStart = startBlocks[0].getNextBlock();
+        if (firstBlockAfterStart) {
+          await this.executeStatements(firstBlockAfterStart);
+        }
+        if (this.isRunning) { this.isRunning = false; console.log("[Interpreter] Run finished naturally."); }
+        else { console.log("[Interpreter] Run stopped by user or error."); }
+      }
+
+      stop() { console.log("[Interpreter] Stop requested."); this.isRunning = false; }
+    }
+
+    // --- 実行処理 ---
+    let interpreterInstance = null;
+    const simFunctions = { sleep, setLightStateWrapper, lightUpForSeconds, turnOffAllLights };
+
+    document.getElementById('runButton').addEventListener('click', async function () {
+      const runButton = this;
+      if (interpreterInstance && interpreterInstance.isRunning) {
+        interpreterInstance.stop();
+        // UI更新は finally で行うのでここでは不要
+        return;
+      }
+      interpreterInstance = new BlockInterpreter(workspace, simFunctions);
+      interpreterInstance.registerBlockHandler('action_light_up_seconds', async (block, interp) => { if (!interp.isRunning) return; const color = interp.getBlockValue(block, 'COLOR', 'red'); const seconds = interp.getBlockValue(block, 'SECONDS', 1); await interp.sim.lightUpForSeconds(color, seconds); });
+      interpreterInstance.registerBlockHandler('action_turn_on_light', async (block, interp) => { if (!interp.isRunning) return; const color = interp.getBlockValue(block, 'COLOR', 'red'); interp.sim.setLightStateWrapper(color, true); });
+      interpreterInstance.registerBlockHandler('action_turn_off_light', async (block, interp) => { if (!interp.isRunning) return; const color = interp.getBlockValue(block, 'COLOR', 'red'); interp.sim.setLightStateWrapper(color, false); });
+      interpreterInstance.registerBlockHandler('action_turn_off_all_lights', async (block, interp) => { if (!interp.isRunning) return; interp.sim.turnOffAllLights(); });
+      interpreterInstance.registerBlockHandler('control_wait_seconds', async (block, interp) => { if (!interp.isRunning) return; const seconds = interp.getBlockValue(block, 'SECONDS', 1); await interp.sim.sleep(seconds); });
+      interpreterInstance.registerBlockHandler('control_infinite_loop', async (block, interp) => { const statementInput = block.getInput('DO'); if (statementInput && statementInput.connection) { const firstBlockInLoop = statementInput.connection.targetBlock(); while (interp.isRunning) { if (firstBlockInLoop) { await interp.executeStatements(firstBlockInLoop); } if (!interp.isRunning) break; await interp.sim.sleep(0.01); } } });
+      interpreterInstance.registerBlockHandler('control_repeat_n_times', async (block, interp) => { const times = interp.getBlockValue(block, 'TIMES', 0); const statementInput = block.getInput('DO'); if (statementInput && statementInput.connection) { const firstBlockInLoop = statementInput.connection.targetBlock(); for (let i = 0; i < times && interp.isRunning; i++) { if (firstBlockInLoop) { await interp.executeStatements(firstBlockInLoop); } if (!interp.isRunning) break; await interp.sim.sleep(0.01); } } });
+
+      runButton.textContent = '停止';
+      runButton.style.backgroundColor = '#f44336';
+      console.log("実行ボタンクリック: Interpreterプログラム開始処理");
+      try {
+        await interpreterInstance.run();
+      } catch (e) {
+        console.error("Interpreterの実行中にメインエラーが発生しました:", e);
+        if (interpreterInstance && interpreterInstance.isRunning) { alert("エラーが発生しました: " + e.message); }
+      } finally {
+        console.log("プログラム実行フロー完了 (finally)。Interpreter isRunning:", interpreterInstance ? interpreterInstance.isRunning : 'N/A');
+        runButton.textContent = '実行';
+        runButton.style.backgroundColor = '#4CAF50';
+        simFunctions.turnOffAllLights();
+      }
+    });
+
+    // --- 初期化処理 ---
+    window.onload = function () {
+      console.log("Window loaded. Initializing Blockly and Canvas (Interpreter Mode)...");
+      initBlockly();
+      initTrafficLightCanvas();
+      console.log("Initialization complete (Interpreter Mode).");
+    };
+  </script>
+
+</body>
+
+</html>
